@@ -1,50 +1,131 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import CustomInput from '@/components/CustomInput.vue'
+import { supabase } from '@/utils/supabase' // Pastikan export di file ini bernama 'supabase'
 
-// Sample data - replace with actual data source
-const jobs = ref([
-  { id: 1, company: 'PT. ABC', url: 'https://www.abc.com', date: '2024-01-15', status: 'applied', notes: 'Melamar posisi Frontend Developer' },
-  { id: 2, company: 'PT. XYZ', url: 'https://www.xyz.com', date: '2024-01-16', status: 'interview', notes: 'Interview tahap 1' },
-  { id: 3, company: 'PT. DEF', url: 'https://www.def.com', date: '2024-01-17', status: 'pending', notes: 'Menunggu konfirmasi' },
-  { id: 4, company: 'PT. GHI', url: 'https://www.ghi.com', date: '2024-01-18', status: 'applied', notes: 'Melamar posisi Backend Developer' },
-  { id: 5, company: 'PT. JKL', url: 'https://www.jkl.com', date: '2024-01-19', status: 'rejected', notes: 'Tidak memenuhi kualifikasi' },
-  { id: 6, company: 'PT. MNO', url: 'https://www.mno.com', date: '2024-01-20', status: 'interview', notes: 'Interview tahap 2' },
-  { id: 7, company: 'PT. PQR', url: 'https://www.pqr.com', date: '2024-01-21', status: 'applied', notes: 'Melamar posisi Full Stack Developer' },
-  { id: 8, company: 'PT. STU', url: 'https://www.stu.com', date: '2024-01-22', status: 'pending', notes: 'Menunggu review CV' },
-  { id: 9, company: 'PT. VWX', url: 'https://www.vwx.com', date: '2024-01-23', status: 'hired', notes: 'Diterima!' },
-  { id: 10, company: 'PT. YZA', url: 'https://www.yza.com', date: '2024-01-24', status: 'applied', notes: 'Melamar posisi DevOps Engineer' },
-  { id: 11, company: 'PT. BCD', url: 'https://www.bcd.com', date: '2024-01-25', status: 'interview', notes: 'Interview tahap 1' },
-  { id: 12, company: 'PT. EFG', url: 'https://www.efg.com', date: '2024-01-26', status: 'pending', notes: 'Menunggu feedback' },
-  { id: 13, company: 'PT. HIJ', url: 'https://www.hij.com', date: '2024-01-27', status: 'rejected', notes: 'Posisi sudah terisi' },
-  { id: 14, company: 'PT. KLM', url: 'https://www.klm.com', date: '2024-01-28', status: 'applied', notes: 'Melamar posisi UI/UX Designer' },
-  { id: 15, company: 'PT. NOP', url: 'https://www.nop.com', date: '2024-01-29', status: 'interview', notes: 'Interview tahap 3' },
-  { id: 16, company: 'PT. QRS', url: 'https://www.qrs.com', date: '2024-01-30', status: 'pending', notes: 'Menunggu keputusan' },
-  { id: 17, company: 'PT. TUV', url: 'https://www.tuv.com', date: '2024-01-31', status: 'applied', notes: 'Melamar posisi Mobile Developer' },
-  { id: 18, company: 'PT. WXY', url: 'https://www.wxy.com', date: '2024-02-01', status: 'hired', notes: 'Diterima sebagai Mobile Developer' },
-  { id: 19, company: 'PT. ZAB', url: 'https://www.zab.com', date: '2024-02-02', status: 'rejected', notes: 'Tidak cocok dengan budaya perusahaan' },
-  { id: 20, company: 'PT. CDE', url: 'https://www.cde.com', date: '2024-02-03', status: 'interview', notes: 'Interview final' },
-  { id: 21, company: 'PT. FGH', url: 'https://www.fgh.com', date: '2024-02-04', status: 'pending', notes: 'Menunggu konfirmasi interview' },
-  { id: 22, company: 'PT. IJK', url: 'https://www.ijk.com', date: '2024-02-05', status: 'applied', notes: 'Melamar posisi Data Scientist' },
-])
-
+// State Utama
+const jobs = ref([])
+const loading = ref(false)
 const currentPage = ref(1)
 const itemsPerPage = 10
 
-// Edit modal state
+// Form Tambah (New Job)
+const newJob = ref({
+  company_name: '',
+  vacancy_url: '',
+  apply_date: new Date().toISOString().split('T')[0],
+  status: 'pending',
+  notes: ''
+})
+
+// State Modal Edit
 const showEditModal = ref(false)
 const editingJob = ref(null)
 const editForm = ref({
-  company: '',
-  url: '',
-  date: '',
+  company_name: '',
+  vacancy_url: '',
+  apply_date: '',
   status: 'pending',
   notes: '',
 })
 
-// Delete confirmation state
+// State Modal Delete
 const showDeleteModal = ref(false)
 const jobToDelete = ref(null)
+
+// --- FUNGSI SUPABASE ---
+
+// 1. Ambil Data
+const fetchJobs = async () => {
+  loading.value = true
+  const { data, error } = await supabase
+    .from('work_tables')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Gagal mengambil data:', error.message)
+  } else {
+    jobs.value = data
+  }
+  loading.value = false
+}
+
+// 2. Tambah Data
+const addJob = async () => {
+  if (!newJob.value.company_name) return alert('Nama perusahaan wajib diisi')
+
+  const { data, error } = await supabase
+    .from('work_tables')
+    .insert([newJob.value])
+    .select()
+
+  if (error) {
+    alert('Gagal menambah: ' + error.message)
+  } else {
+    // Update local state agar tidak perlu refresh
+    jobs.value.unshift(data[0])
+    // Reset form
+    newJob.value = {
+      company_name: '',
+      vacancy_url: '',
+      apply_date: new Date().toISOString().split('T')[0],
+      status: 'pending',
+      notes: ''
+    }
+  }
+}
+
+// 3. Update Data
+const saveEdit = async () => {
+  if (editingJob.value) {
+    const { error } = await supabase
+      .from('work_tables')
+      .update({
+        company_name: editForm.value.company_name,
+        vacancy_url: editForm.value.vacancy_url,
+        apply_date: editForm.value.apply_date,
+        status: editForm.value.status,
+        notes: editForm.value.notes
+      })
+      .eq('id', editingJob.value.id)
+
+    if (error) {
+      alert('Gagal update: ' + error.message)
+    } else {
+      const index = jobs.value.findIndex((j) => j.id === editingJob.value.id)
+      if (index !== -1) {
+        jobs.value[index] = { ...jobs.value[index], ...editForm.value }
+      }
+      closeEditModal()
+    }
+  }
+}
+
+// 4. Hapus Data
+const confirmDelete = async () => {
+  if (jobToDelete.value) {
+    const { error } = await supabase
+      .from('work_tables')
+      .delete()
+      .eq('id', jobToDelete.value.id)
+
+    if (error) {
+      alert('Gagal menghapus: ' + error.message)
+    } else {
+      jobs.value = jobs.value.filter((j) => j.id !== jobToDelete.value.id)
+      if (currentPage.value > totalPages.value) {
+        currentPage.value = Math.max(1, totalPages.value)
+      }
+      closeDeleteModal()
+    }
+  }
+}
+
+// Ambil data saat halaman dibuka
+onMounted(fetchJobs)
+
+// --- LOGIKA UI & PAGINATION ---
 
 const totalPages = computed(() => Math.ceil(jobs.value.length / itemsPerPage))
 
@@ -71,29 +152,18 @@ const getStatusBadgeClass = (status) => {
   return classes[status] || classes.pending
 }
 
-const getStatusLabel = (status) => {
-  const labels = {
-    pending: 'Pending',
-    applied: 'Applied',
-    interview: 'Interview',
-    rejected: 'Rejected',
-    hired: 'Hired',
-  }
-  return labels[status] || status
-}
-
 const formatDate = (dateString) => {
+  if (!dateString) return '-'
   const date = new Date(dateString)
   return date.toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-// Edit functions
 const openEditModal = (job) => {
   editingJob.value = job
   editForm.value = {
-    company: job.company,
-    url: job.url,
-    date: job.date,
+    company_name: job.company_name,
+    vacancy_url: job.vacancy_url,
+    apply_date: job.apply_date,
     status: job.status,
     notes: job.notes,
   }
@@ -103,29 +173,8 @@ const openEditModal = (job) => {
 const closeEditModal = () => {
   showEditModal.value = false
   editingJob.value = null
-  editForm.value = {
-    company: '',
-    url: '',
-    date: '',
-    status: 'pending',
-    notes: '',
-  }
 }
 
-const saveEdit = () => {
-  if (editingJob.value) {
-    const index = jobs.value.findIndex((j) => j.id === editingJob.value.id)
-    if (index !== -1) {
-      jobs.value[index] = {
-        ...jobs.value[index],
-        ...editForm.value,
-      }
-    }
-    closeEditModal()
-  }
-}
-
-// Delete functions
 const openDeleteModal = (job) => {
   jobToDelete.value = job
   showDeleteModal.value = true
@@ -135,131 +184,100 @@ const closeDeleteModal = () => {
   showDeleteModal.value = false
   jobToDelete.value = null
 }
-
-const confirmDelete = () => {
-  if (jobToDelete.value) {
-    const index = jobs.value.findIndex((j) => j.id === jobToDelete.value.id)
-    if (index !== -1) {
-      jobs.value.splice(index, 1)
-      // Adjust current page if needed
-      if (currentPage.value > totalPages.value) {
-        currentPage.value = Math.max(1, totalPages.value)
-      }
-    }
-    closeDeleteModal()
-  }
-}
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
-    <form action="" class="flex flex-col gap-4 bg-gray-800 p-4 rounded-md">
-      <CustomInput label="Nama Perusahaan" type="text" placeholder="Masukkan nama perusahaan" id="company-name" />
-      <CustomInput label="URL Lowongan Kerja" type="text" placeholder="Masukkan URL lowongan kerja" id="job-url" />
-      <CustomInput label="Tanggal Lamar" type="date" placeholder="Masukkan tanggal lamar" id="apply-date" />
-      <select id="status"
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-4 bg-gray-800">
-        <option value="pending">Pending</option>
-        <option value="applied">Applied</option>
-        <option value="interview">Interview</option>
-        <option value="rejected">Rejected</option>
-        <option value="hired">Hired</option>
-      </select>
-      <CustomInput label="Catatan" type="textarea" placeholder="Masukkan catatan" id="notes" />
-      <button type="submit" class="bg-orange-500 text-white px-4 py-2 rounded-md">Tambah</button>
+  <div class="flex flex-col gap-4 p-4 md:p-8 bg-gray-900 min-h-screen">
+    <!-- Form Tambah -->
+    <form @submit.prevent="addJob"
+      class="flex flex-col gap-4 bg-gray-800 p-6 rounded-lg shadow-md border border-gray-700">
+      <h2 class="text-lg font-bold text-white mb-2">Lacak Lamaran Baru</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CustomInput v-model="newJob.company_name" label="Nama Perusahaan" type="text"
+          placeholder="Contoh: PT. Maju Jaya" />
+        <CustomInput v-model="newJob.vacancy_url" label="URL Lowongan" type="text" placeholder="https://..." />
+        <CustomInput v-model="newJob.apply_date" label="Tanggal Lamar" type="date" />
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Status</label>
+          <select v-model="newJob.status"
+            class="w-full rounded-md border-gray-600 shadow-sm p-3 bg-gray-700 text-white focus:ring-orange-500">
+            <option value="pending">Pending</option>
+            <option value="applied">Applied</option>
+            <option value="interview">Interview</option>
+            <option value="rejected">Rejected</option>
+            <option value="hired">Hired</option>
+          </select>
+        </div>
+      </div>
+      <CustomInput v-model="newJob.notes" label="Catatan" type="textarea" placeholder="Detail tambahan..." />
+      <button type="submit" :disabled="loading"
+        class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-md transition-all">
+        {{ loading ? 'Memproses...' : 'Tambah Pelacakan' }}
+      </button>
     </form>
 
-    <div class="w-full bg-gray-800 p-6 rounded-md shadow-lg">
-      <div class="mb-4 flex items-center justify-between">
+    <!-- Tabel Daftar -->
+    <div class="w-full bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
+      <div class="mb-4 flex flex-col md:flex-row items-center justify-between gap-4">
         <h2 class="text-xl font-semibold text-white">Daftar Lowongan Kerja</h2>
-        <span class="text-sm text-gray-400">
-          Menampilkan {{ (currentPage - 1) * itemsPerPage + 1 }}-{{ Math.min(currentPage * itemsPerPage, jobs.length) }}
-          dari {{ jobs.length }} pekerjaan
+        <span class="text-sm text-gray-400 bg-gray-700 px-3 py-1 rounded-full">
+          Total: {{ jobs.length }} Data
         </span>
       </div>
 
       <div class="overflow-x-auto rounded-lg border border-gray-700">
-        <table class="w-full">
-          <thead class="bg-gray-700/50">
+        <table class="w-full text-left">
+          <thead class="bg-gray-700/50 text-gray-300 text-xs uppercase">
             <tr>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-gray-700">
-                No
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-gray-700">
-                Nama Perusahaan
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-gray-700">
-                URL Lowongan Kerja
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-gray-700">
-                Tanggal Lamar
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-gray-700">
-                Status
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-gray-700">
-                Catatan
-              </th>
-              <th
-                class="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-gray-700">
-                Aksi
-              </th>
+              <th class="px-6 py-4">No</th>
+              <th class="px-6 py-4">Perusahaan</th>
+              <th class="px-6 py-4">Tanggal</th>
+              <th class="px-6 py-4">Status</th>
+              <th class="px-6 py-4">Aksi</th>
             </tr>
           </thead>
-          <tbody class="bg-gray-800 divide-y divide-gray-700">
-            <tr v-for="(job, index) in paginatedJobs" :key="job.id"
-              class="hover:bg-gray-700/50 transition-colors duration-150">
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+          <tbody class="divide-y divide-gray-700">
+            <tr v-if="loading" class="text-center">
+              <td colspan="5" class="py-10 text-gray-500">Memuat data dari database...</td>
+            </tr>
+            <tr v-else-if="jobs.length === 0" class="text-center">
+              <td colspan="5" class="py-10 text-gray-500">Belum ada data pelacakan.</td>
+            </tr>
+            <tr v-for="(job, index) in paginatedJobs" :key="job.id" class="hover:bg-gray-700/30 transition-colors">
+              <td class="px-6 py-4 text-sm text-gray-400">
                 {{ (currentPage - 1) * itemsPerPage + index + 1 }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                {{ job.company }}
+              <td class="px-6 py-4">
+                <div class="font-medium text-white">{{ job.company_name }}</div>
+                <a :href="job.vacancy_url" target="_blank"
+                  class="text-xs text-blue-400 hover:underline truncate block max-w-[150px]">Link Lowongan</a>
               </td>
               <td class="px-6 py-4 text-sm text-gray-300">
-                <a :href="job.url" target="_blank" rel="noopener noreferrer"
-                  class="text-blue-400 hover:text-blue-300 hover:underline truncate block max-w-xs" :title="job.url">
-                  {{ job.url }}
-                </a>
+                {{ formatDate(job.apply_date) }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                {{ formatDate(job.date) }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
+              <td class="px-6 py-4">
+                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase"
                   :class="getStatusBadgeClass(job.status)">
-                  {{ getStatusLabel(job.status) }}
+                  {{ job.status }}
                 </span>
               </td>
-              <td class="px-6 py-4 text-sm text-gray-300 max-w-xs">
-                <p class="truncate" :title="job.notes">{{ job.notes }}</p>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                <div class="flex items-center justify-center gap-2">
+              <td class="px-6 py-4">
+                <div class="flex gap-2">
                   <button @click="openEditModal(job)"
-                    class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors duration-150"
-                    title="Edit">
+                    class="p-2 bg-blue-600/20 text-blue-400 rounded-md hover:bg-blue-600 hover:text-white transition-all">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
-                    <span class="ml-1">Edit</span>
                   </button>
                   <button @click="openDeleteModal(job)"
-                    class="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-md transition-colors duration-150"
-                    title="Hapus">
+                    class="p-2 bg-red-600/20 text-red-400 rounded-md hover:bg-red-600 hover:text-white transition-all">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    <span class="ml-1">Hapus</span>
                   </button>
                 </div>
               </td>
@@ -268,131 +286,57 @@ const confirmDelete = () => {
         </table>
       </div>
 
-      <!-- Pagination Controls -->
-      <div class="mt-6 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <button @click="goToPage(currentPage - 1)" :disabled="currentPage === 1" :class="[
-            'px-4 py-2 rounded-md text-sm font-medium transition-colors',
-            currentPage === 1
-              ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-              : 'bg-gray-700 text-white hover:bg-gray-600'
-          ]">
-            Sebelumnya
-          </button>
-          <button @click="goToPage(currentPage + 1)" :disabled="currentPage === totalPages" :class="[
-            'px-4 py-2 rounded-md text-sm font-medium transition-colors',
-            currentPage === totalPages
-              ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-              : 'bg-gray-700 text-white hover:bg-gray-600'
-          ]">
-            Selanjutnya
-          </button>
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="mt-6 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex gap-2">
+          <button @click="goToPage(currentPage - 1)" :disabled="currentPage === 1"
+            class="px-4 py-2 bg-gray-700 text-white rounded-md disabled:opacity-50">Sebelumnnya</button>
+          <button @click="goToPage(currentPage + 1)" :disabled="currentPage === totalPages"
+            class="px-4 py-2 bg-gray-700 text-white rounded-md disabled:opacity-50">Selanjutnya</button>
         </div>
-
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-400">Halaman</span>
-          <div class="flex gap-1">
-            <button v-for="page in totalPages" :key="page" @click="goToPage(page)" :class="[
-              'px-3 py-1 rounded-md text-sm font-medium transition-colors',
-              currentPage === page
-                ? 'bg-orange-500 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            ]">
-              {{ page }}
-            </button>
-          </div>
-          <span class="text-sm text-gray-400">dari {{ totalPages }}</span>
+        <div class="flex gap-1">
+          <button v-for="page in totalPages" :key="page" @click="goToPage(page)"
+            :class="['px-3 py-1 rounded-md text-sm', currentPage === page ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600']">
+            {{ page }}
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Edit Modal -->
-    <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-      @click.self="closeEditModal">
-      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-        <div class="p-6">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-xl font-semibold text-white">Edit Pekerjaan</h3>
-            <button @click="closeEditModal" class="text-gray-400 hover:text-white transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <form @submit.prevent="saveEdit" class="flex flex-col gap-4">
-            <CustomInput v-model="editForm.company" label="Nama Perusahaan" type="text"
-              placeholder="Masukkan nama perusahaan" id="edit-company-name" />
-            <CustomInput v-model="editForm.url" label="URL Lowongan Kerja" type="text"
-              placeholder="Masukkan URL lowongan kerja" id="edit-job-url" />
-            <CustomInput v-model="editForm.date" label="Tanggal Lamar" type="date" placeholder="Masukkan tanggal lamar"
-              id="edit-apply-date" />
-            <div>
-              <label for="edit-status" class="block text-sm font-medium text-gray-300 mb-1">
-                Status
-              </label>
-              <select id="edit-status" v-model="editForm.status"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-4 bg-gray-700 text-white">
-                <option value="pending">Pending</option>
-                <option value="applied">Applied</option>
-                <option value="interview">Interview</option>
-                <option value="rejected">Rejected</option>
-                <option value="hired">Hired</option>
-              </select>
-            </div>
-            <CustomInput v-model="editForm.notes" label="Catatan" type="textarea" placeholder="Masukkan catatan"
-              id="edit-notes" />
-            <div class="flex gap-3 justify-end mt-4">
-              <button type="button" @click="closeEditModal"
-                class="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors">
-                Batal
-              </button>
-              <button type="submit"
-                class="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors">
-                Simpan Perubahan
-              </button>
-            </div>
-          </form>
+    <!-- Modals (Edit & Delete) tetap menggunakan logika yang sama, hanya pastikan v-model diarahkan ke state yang benar -->
+    <!-- [MODAL EDIT & DELETE DISINI...] -->
+    <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div class="bg-gray-800 p-6 rounded-lg w-full max-w-xl border border-gray-700 shadow-2xl">
+        <h3 class="text-xl font-bold text-white mb-4">Edit Data Lamaran</h3>
+        <div class="grid grid-cols-1 gap-4">
+          <CustomInput v-model="editForm.company_name" label="Nama Perusahaan" />
+          <CustomInput v-model="editForm.vacancy_url" label="URL Lowongan" />
+          <CustomInput v-model="editForm.apply_date" label="Tanggal" type="date" />
+          <select v-model="editForm.status" class="w-full rounded-md p-3 bg-gray-700 text-white border-gray-600">
+            <option value="pending">Pending</option>
+            <option value="applied">Applied</option>
+            <option value="interview">Interview</option>
+            <option value="rejected">Rejected</option>
+            <option value="hired">Hired</option>
+          </select>
+          <CustomInput v-model="editForm.notes" label="Catatan" type="textarea" />
+        </div>
+        <div class="mt-6 flex justify-end gap-3">
+          <button @click="closeEditModal" class="px-4 py-2 text-gray-400 hover:text-white">Batal</button>
+          <button @click="saveEdit" class="px-6 py-2 bg-blue-600 text-white rounded-md font-bold">Simpan
+            Perubahan</button>
         </div>
       </div>
     </div>
 
-    <!-- Delete Confirmation Modal -->
-    <div v-if="showDeleteModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-      @click.self="closeDeleteModal">
-      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
-        <div class="p-6">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-xl font-semibold text-white">Konfirmasi Hapus</h3>
-            <button @click="closeDeleteModal" class="text-gray-400 hover:text-white transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div class="mb-6">
-            <p class="text-gray-300 mb-2">
-              Apakah Anda yakin ingin menghapus pekerjaan ini?
-            </p>
-            <div class="bg-gray-700 p-3 rounded-md">
-              <p class="text-white font-medium">{{ jobToDelete?.company }}</p>
-              <p class="text-gray-400 text-sm mt-1">{{ jobToDelete?.url }}</p>
-            </div>
-          </div>
-
-          <div class="flex gap-3 justify-end">
-            <button @click="closeDeleteModal"
-              class="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors">
-              Batal
-            </button>
-            <button @click="confirmDelete"
-              class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors">
-              Hapus
-            </button>
-          </div>
+    <div v-if="showDeleteModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div class="bg-gray-800 p-6 rounded-lg w-full max-w-sm border border-gray-700">
+        <h3 class="text-lg font-bold text-white mb-2">Hapus Data?</h3>
+        <p class="text-gray-400 mb-6">Tindakan ini tidak dapat dibatalkan. Hapus pelacakan untuk <b>{{
+          jobToDelete?.company_name }}</b>?</p>
+        <div class="flex justify-end gap-3">
+          <button @click="closeDeleteModal" class="px-4 py-2 text-gray-400">Batal</button>
+          <button @click="confirmDelete" class="px-6 py-2 bg-red-600 text-white rounded-md font-bold">Ya, Hapus</button>
         </div>
       </div>
     </div>
