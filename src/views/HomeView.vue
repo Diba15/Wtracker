@@ -1,7 +1,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import CustomInput from '@/components/CustomInput.vue'
-import { supabase } from '@/utils/supabase' // Pastikan export di file ini bernama 'supabase'
+import { fetchJobs, createJob, updateJob, deleteJob } from '@/utils/supabase'
+import { useAuth } from '@/composables/useAuth'
+
+const { user } = useAuth()
 
 // State Utama
 const jobs = ref([])
@@ -36,17 +39,17 @@ const jobToDelete = ref(null)
 // --- FUNGSI SUPABASE ---
 
 // 1. Ambil Data
-const fetchJobs = async () => {
+const loadJobs = async () => {
+  if (!user.value) return
+
   loading.value = true
-  const { data, error } = await supabase
-    .from('work_tables')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const { data, error } = await fetchJobs(user.value.id)
 
   if (error) {
     console.error('Gagal mengambil data:', error.message)
+    alert('Gagal mengambil data: ' + error.message)
   } else {
-    jobs.value = data
+    jobs.value = data || []
   }
   loading.value = false
 }
@@ -54,17 +57,18 @@ const fetchJobs = async () => {
 // 2. Tambah Data
 const addJob = async () => {
   if (!newJob.value.company_name) return alert('Nama perusahaan wajib diisi')
+  if (!user.value) return alert('Anda harus login terlebih dahulu')
 
-  const { data, error } = await supabase
-    .from('work_tables')
-    .insert([newJob.value])
-    .select()
+  loading.value = true
+  const { data, error } = await createJob({ ...newJob.value, user_id: user.value.id })
 
   if (error) {
     alert('Gagal menambah: ' + error.message)
   } else {
     // Update local state agar tidak perlu refresh
-    jobs.value.unshift(data[0])
+    if (data && data[0]) {
+      jobs.value.unshift(data[0])
+    }
     // Reset form
     newJob.value = {
       company_name: '',
@@ -74,56 +78,59 @@ const addJob = async () => {
       notes: ''
     }
   }
+  loading.value = false
 }
 
 // 3. Update Data
 const saveEdit = async () => {
-  if (editingJob.value) {
-    const { error } = await supabase
-      .from('work_tables')
-      .update({
-        company_name: editForm.value.company_name,
-        vacancy_url: editForm.value.vacancy_url,
-        apply_date: editForm.value.apply_date,
-        status: editForm.value.status,
-        notes: editForm.value.notes
-      })
-      .eq('id', editingJob.value.id)
+  if (!editingJob.value) return
 
-    if (error) {
-      alert('Gagal update: ' + error.message)
-    } else {
-      const index = jobs.value.findIndex((j) => j.id === editingJob.value.id)
-      if (index !== -1) {
-        jobs.value[index] = { ...jobs.value[index], ...editForm.value }
-      }
-      closeEditModal()
-    }
+  loading.value = true
+  const updateData = {
+    company_name: editForm.value.company_name,
+    vacancy_url: editForm.value.vacancy_url,
+    apply_date: editForm.value.apply_date,
+    status: editForm.value.status,
+    notes: editForm.value.notes
   }
+
+  const { data, error } = await updateJob(editingJob.value.id, updateData)
+
+  if (error) {
+    alert('Gagal update: ' + error.message)
+  } else {
+    // Update local state
+    const index = jobs.value.findIndex((j) => j.id === editingJob.value.id)
+    if (index !== -1 && data && data[0]) {
+      jobs.value[index] = { ...jobs.value[index], ...data[0] }
+    }
+    closeEditModal()
+  }
+  loading.value = false
 }
 
 // 4. Hapus Data
 const confirmDelete = async () => {
-  if (jobToDelete.value) {
-    const { error } = await supabase
-      .from('work_tables')
-      .delete()
-      .eq('id', jobToDelete.value.id)
+  if (!jobToDelete.value) return
 
-    if (error) {
-      alert('Gagal menghapus: ' + error.message)
-    } else {
-      jobs.value = jobs.value.filter((j) => j.id !== jobToDelete.value.id)
-      if (currentPage.value > totalPages.value) {
-        currentPage.value = Math.max(1, totalPages.value)
-      }
-      closeDeleteModal()
+  loading.value = true
+  const { error } = await deleteJob(jobToDelete.value.id)
+
+  if (error) {
+    alert('Gagal menghapus: ' + error.message)
+  } else {
+    jobs.value = jobs.value.filter((j) => j.id !== jobToDelete.value.id)
+    // Adjust pagination if needed
+    if (currentPage.value > totalPages.value) {
+      currentPage.value = Math.max(1, totalPages.value)
     }
+    closeDeleteModal()
   }
+  loading.value = false
 }
 
 // Ambil data saat halaman dibuka
-onMounted(fetchJobs)
+onMounted(loadJobs)
 
 // --- LOGIKA UI & PAGINATION ---
 
