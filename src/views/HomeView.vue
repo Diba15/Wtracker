@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import CustomInput from '@/components/CustomInput.vue'
-import { fetchJobs, createJob, updateJob, deleteJob } from '@/utils/supabase'
+import CustomCard from '@/components/Card.vue'
+import { fetchJobs, updateJob, deleteJob } from '@/utils/supabase'
 import { useAuth } from '@/composables/useAuth'
 
 const { user } = useAuth()
@@ -11,15 +12,9 @@ const jobs = ref([])
 const loading = ref(false)
 const currentPage = ref(1)
 const itemsPerPage = 10
-
-// Form Tambah (New Job)
-const newJob = ref({
-  company_name: '',
-  vacancy_url: '',
-  apply_date: new Date().toISOString().split('T')[0],
-  status: 'pending',
-  notes: ''
-})
+const totalVacancyNow = ref(0)
+const totalHired = ref(0)
+const totalRejected = ref(0)
 
 // State Modal Edit
 const showEditModal = ref(false)
@@ -54,34 +49,7 @@ const loadJobs = async () => {
   loading.value = false
 }
 
-// 2. Tambah Data
-const addJob = async () => {
-  if (!newJob.value.company_name) return alert('Nama perusahaan wajib diisi')
-  if (!user.value) return alert('Anda harus login terlebih dahulu')
-
-  loading.value = true
-  const { data, error } = await createJob({ ...newJob.value, user_id: user.value.id })
-
-  if (error) {
-    alert('Gagal menambah: ' + error.message)
-  } else {
-    // Update local state agar tidak perlu refresh
-    if (data && data[0]) {
-      jobs.value.unshift(data[0])
-    }
-    // Reset form
-    newJob.value = {
-      company_name: '',
-      vacancy_url: '',
-      apply_date: new Date().toISOString().split('T')[0],
-      status: 'pending',
-      notes: ''
-    }
-  }
-  loading.value = false
-}
-
-// 3. Update Data
+// 2. Update Data
 const saveEdit = async () => {
   if (!editingJob.value) return
 
@@ -130,7 +98,29 @@ const confirmDelete = async () => {
 }
 
 // Ambil data saat halaman dibuka
-onMounted(loadJobs)
+onMounted(() => {
+  loadJobs()
+
+  totalVacancyNow.value = computed(() => {
+    const appliedNow = jobs.value.filter((job) => {
+      const currentDate = new Date()
+
+      return job.apply_date === currentDate.toISOString().split('T')[0] && job.status === 'applied'
+    })
+
+    return appliedNow.length
+  })
+
+  totalHired.value = computed(() => {
+    const hired = jobs.value.filter((job) => job.status === 'hired')
+    return hired.length
+  })
+
+  totalRejected.value = computed(() => {
+    const rejected = jobs.value.filter((job) => job.status === 'rejected')
+    return rejected.length
+  })
+})
 
 // --- LOGIKA UI & PAGINATION ---
 
@@ -195,33 +185,17 @@ const closeDeleteModal = () => {
 
 <template>
   <div class="flex flex-col gap-4 p-4 md:p-8 bg-gray-900 min-h-screen">
-    <!-- Form Tambah -->
-    <form @submit.prevent="addJob"
-      class="flex flex-col gap-4 bg-gray-800 p-6 rounded-lg shadow-md border border-gray-700">
-      <h2 class="text-lg font-bold text-white mb-2">Lacak Lamaran Baru</h2>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <CustomInput v-model="newJob.company_name" label="Nama Perusahaan" type="text"
-          placeholder="Contoh: PT. Maju Jaya" />
-        <CustomInput v-model="newJob.vacancy_url" label="URL Lowongan" type="text" placeholder="https://..." />
-        <CustomInput v-model="newJob.apply_date" label="Tanggal Lamar" type="date" />
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1">Status</label>
-          <select v-model="newJob.status"
-            class="w-full rounded-md border-gray-600 shadow-sm p-3 bg-gray-700 text-white focus:ring-orange-500">
-            <option value="pending">Pending</option>
-            <option value="applied">Applied</option>
-            <option value="interview">Interview</option>
-            <option value="rejected">Rejected</option>
-            <option value="hired">Hired</option>
-          </select>
-        </div>
+    <!-- Dashboard Header -->
+    <div class="bg-gray-800 p-6 rounded-lg shadow-md border border-gray-700">
+      <h1 class="text-2xl font-bold text-white mb-2">Dashboard</h1>
+      <p class="text-gray-400">Kelola dan pantau semua lamaran kerja Anda</p>
+      <div class="flex md:flex-row flex-col gap-4 justify-around items-center">
+        <CustomCard cardTitle="Total dilamar hari ini" cardSubtitle="Total Vacancy"
+          :cardValue="totalVacancyNow ? totalVacancyNow : 0" />
+        <CustomCard cardTitle="Total Ditolak" cardSubtitle="Rejected Job " :cardValue="totalRejected ? totalRejected : 0" />
+        <CustomCard cardTitle="Total Diterima" cardSubtitle="Hired Job" :cardValue="totalHired ? totalHired : 0" />
       </div>
-      <CustomInput v-model="newJob.notes" label="Catatan" type="textarea" placeholder="Detail tambahan..." />
-      <button type="submit" :disabled="loading"
-        class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-md transition-all">
-        {{ loading ? 'Memproses...' : 'Tambah Pelacakan' }}
-      </button>
-    </form>
+    </div>
 
     <!-- Tabel Daftar -->
     <div class="w-full bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
@@ -316,9 +290,11 @@ const closeDeleteModal = () => {
       <div class="bg-gray-800 p-6 rounded-lg w-full max-w-xl border border-gray-700 shadow-2xl">
         <h3 class="text-xl font-bold text-white mb-4">Edit Data Lamaran</h3>
         <div class="grid grid-cols-1 gap-4">
-          <CustomInput v-model="editForm.company_name" label="Nama Perusahaan" />
-          <CustomInput v-model="editForm.vacancy_url" label="URL Lowongan" />
-          <CustomInput v-model="editForm.apply_date" label="Tanggal" type="date" />
+          <CustomInput v-model="editForm.company_name" label="Nama Perusahaan" type="text" placeholder="Nama perusahaan"
+            id="edit_company_name" />
+          <CustomInput v-model="editForm.vacancy_url" label="URL Lowongan" type="text" placeholder="https://..."
+            id="edit_vacancy_url" />
+          <CustomInput v-model="editForm.apply_date" label="Tanggal" type="date" placeholder="" id="edit_apply_date" />
           <select v-model="editForm.status" class="w-full rounded-md p-3 bg-gray-700 text-white border-gray-600">
             <option value="pending">Pending</option>
             <option value="applied">Applied</option>
@@ -326,7 +302,8 @@ const closeDeleteModal = () => {
             <option value="rejected">Rejected</option>
             <option value="hired">Hired</option>
           </select>
-          <CustomInput v-model="editForm.notes" label="Catatan" type="textarea" />
+          <CustomInput v-model="editForm.notes" label="Catatan" type="textarea" placeholder="Detail tambahan..."
+            id="edit_notes" />
         </div>
         <div class="mt-6 flex justify-end gap-3">
           <button @click="closeEditModal" class="px-4 py-2 text-gray-400 hover:text-white">Batal</button>

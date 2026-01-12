@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { RouterView } from 'vue-router'
+import { RouterLink, RouterView } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { checkUser, initAuth } from '@/composables/useAuth'
 
@@ -27,9 +27,17 @@ const getUserEmail = () => {
 <template>
   <header>
     <nav class="flex gap-2 justify-between items-center p-4 bg-gray-800 border-b border-gray-700">
-      <h1 class="text-2xl font-bold text-white">
-        WT<span class="text-orange-500 text-sm">Work Tracker</span>
-      </h1>
+
+      <div class="flex gap-2 items-center">
+        <h1 class="text-2xl font-bold text-white">
+          WT<span class="text-orange-500 text-sm">Work Tracker</span>
+        </h1>
+        <div class="flex" v-if="user">
+          <Router-link to="/" class="px-4 py-2 ">Home</Router-link>
+          <Router-link to="/insert" class="px-4 py-2 ">Insert</Router-link>
+        </div>
+      </div>
+
       <div v-if="user" class="flex items-center gap-4">
         <span class="text-sm text-gray-300">{{ getUserEmail() }}</span>
         <button @click="handleLogout"
