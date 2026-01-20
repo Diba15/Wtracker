@@ -12,9 +12,21 @@ const jobs = ref([])
 const loading = ref(false)
 const currentPage = ref(1)
 const itemsPerPage = 10
-const totalVacancyNow = ref(0)
-const totalHired = ref(0)
-const totalRejected = ref(0)
+
+// --- COMPUTED STATS ---
+// Memindahkan logika statistik ke level top agar lebih reaktif dan bersih
+const totalVacancyNow = computed(() => {
+  const today = new Date().toISOString().split('T')[0]
+  return jobs.value.filter(job => job.apply_date === today && job.status === 'applied').length
+})
+
+const totalHired = computed(() => {
+  return jobs.value.filter(job => job.status === 'hired').length
+})
+
+const totalRejected = computed(() => {
+  return jobs.value.filter(job => job.status === 'rejected').length
+})
 
 // State Modal Edit
 const showEditModal = ref(false)
@@ -31,18 +43,19 @@ const editForm = ref({
 const showDeleteModal = ref(false)
 const jobToDelete = ref(null)
 
-// --- FUNGSI SUPABASE ---
+// --- FUNGSI API (VIA ELYSIA PROXY) ---
 
 // 1. Ambil Data
 const loadJobs = async () => {
   if (!user.value) return
 
   loading.value = true
-  const { data, error } = await fetchJobs(user.value.id)
+  // Di API baru, kita tidak perlu mengirim user.value.id
+  // karena ID diambil dari token di backend
+  const { data, error } = await fetchJobs()
 
   if (error) {
     console.error('Gagal mengambil data:', error.message)
-    alert('Gagal mengambil data: ' + error.message)
   } else {
     jobs.value = data || []
   }
@@ -67,7 +80,7 @@ const saveEdit = async () => {
   if (error) {
     alert('Gagal update: ' + error.message)
   } else {
-    // Update local state
+    // Update local state (data[0] karena helper membungkus response dalam array)
     const index = jobs.value.findIndex((j) => j.id === editingJob.value.id)
     if (index !== -1 && data && data[0]) {
       jobs.value[index] = { ...jobs.value[index], ...data[0] }
@@ -88,7 +101,8 @@ const confirmDelete = async () => {
     alert('Gagal menghapus: ' + error.message)
   } else {
     jobs.value = jobs.value.filter((j) => j.id !== jobToDelete.value.id)
-    // Adjust pagination if needed
+
+    // Sesuaikan pagination jika halaman menjadi kosong setelah hapus
     if (currentPage.value > totalPages.value) {
       currentPage.value = Math.max(1, totalPages.value)
     }
@@ -100,26 +114,6 @@ const confirmDelete = async () => {
 // Ambil data saat halaman dibuka
 onMounted(() => {
   loadJobs()
-
-  totalVacancyNow.value = computed(() => {
-    const appliedNow = jobs.value.filter((job) => {
-      const currentDate = new Date()
-
-      return job.apply_date === currentDate.toISOString().split('T')[0] && job.status === 'applied'
-    })
-
-    return appliedNow.length
-  })
-
-  totalHired.value = computed(() => {
-    const hired = jobs.value.filter((job) => job.status === 'hired')
-    return hired.length
-  })
-
-  totalRejected.value = computed(() => {
-    const rejected = jobs.value.filter((job) => job.status === 'rejected')
-    return rejected.length
-  })
 })
 
 // --- LOGIKA UI & PAGINATION ---
@@ -192,7 +186,8 @@ const closeDeleteModal = () => {
       <div class="flex md:flex-row flex-col gap-4 justify-around items-center">
         <CustomCard cardTitle="Total dilamar hari ini" cardSubtitle="Total Vacancy"
           :cardValue="totalVacancyNow ? totalVacancyNow : 0" />
-        <CustomCard cardTitle="Total Ditolak" cardSubtitle="Rejected Job " :cardValue="totalRejected ? totalRejected : 0" />
+        <CustomCard cardTitle="Total Ditolak" cardSubtitle="Rejected Job "
+          :cardValue="totalRejected ? totalRejected : 0" />
         <CustomCard cardTitle="Total Diterima" cardSubtitle="Hired Job" :cardValue="totalHired ? totalHired : 0" />
       </div>
     </div>

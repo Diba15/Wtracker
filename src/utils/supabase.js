@@ -1,32 +1,40 @@
 import { createClient } from '@supabase/supabase-js'
 
+// 1. Inisialisasi Supabase (Hanya untuk keperluan AUTH)
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// API Helper Functions untuk CRUD operations
+// 2. Konfigurasi URL API Elysia Anda (Sesuaikan dengan URL Vercel Backend Anda)
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 /**
- * GET: Mengambil semua data pekerjaan
- * @param {string} userId - ID user untuk filter data
- * @returns {Promise<{data: Array, error: Error|null}>}
+ * Helper untuk mendapatkan Header Authorization (Bearer Token)
  */
-export const fetchJobs = async (userId) => {
+const getAuthHeaders = async () => {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  }
+}
+
+/**
+ * GET: Mengambil semua data pekerjaan melalui API Elysia
+ */
+export const fetchJobs = async () => {
   try {
-    let query = supabase
-      .from('work_tables')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const headers = await getAuthHeaders()
+    const response = await fetch(`${API_URL}/api/jobs`, {
+      method: 'GET',
+      headers
+    })
 
-    // Filter by user_id jika userId diberikan
-    if (userId) {
-      query = query.eq('user_id', userId)
-    }
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Gagal mengambil data')
 
-    const { data, error } = await query
-
-    if (error) throw error
     return { data, error: null }
   } catch (err) {
     console.error('Error fetching jobs:', err)
@@ -35,19 +43,21 @@ export const fetchJobs = async (userId) => {
 }
 
 /**
- * POST: Menambah data pekerjaan baru
- * @param {Object} jobData - Data pekerjaan yang akan ditambahkan
- * @returns {Promise<{data: Array, error: Error|null}>}
+ * POST: Menambah data pekerjaan baru melalui API Elysia
  */
 export const createJob = async (jobData) => {
   try {
-    const { data, error } = await supabase
-      .from('work_tables')
-      .insert([jobData])
-      .select()
+    const headers = await getAuthHeaders()
+    const response = await fetch(`${API_URL}/api/jobs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(jobData)
+    })
 
-    if (error) throw error
-    return { data, error: null }
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Gagal menambah data')
+
+    return { data: [data], error: null }
   } catch (err) {
     console.error('Error creating job:', err)
     return { data: null, error: err }
@@ -55,21 +65,21 @@ export const createJob = async (jobData) => {
 }
 
 /**
- * PATCH: Update data pekerjaan
- * @param {string} jobId - ID pekerjaan yang akan diupdate
- * @param {Object} updateData - Data yang akan diupdate
- * @returns {Promise<{data: Array, error: Error|null}>}
+ * PATCH: Update data pekerjaan melalui API Elysia
  */
 export const updateJob = async (jobId, updateData) => {
   try {
-    const { data, error } = await supabase
-      .from('work_tables')
-      .update(updateData)
-      .eq('id', jobId)
-      .select()
+    const headers = await getAuthHeaders()
+    const response = await fetch(`${API_URL}/api/jobs/${jobId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(updateData)
+    })
 
-    if (error) throw error
-    return { data, error: null }
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Gagal update data')
+
+    return { data: [data], error: null }
   } catch (err) {
     console.error('Error updating job:', err)
     return { data: null, error: err }
@@ -77,18 +87,19 @@ export const updateJob = async (jobId, updateData) => {
 }
 
 /**
- * DELETE: Hapus data pekerjaan
- * @param {string} jobId - ID pekerjaan yang akan dihapus
- * @returns {Promise<{error: Error|null}>}
+ * DELETE: Hapus data pekerjaan melalui API Elysia
  */
 export const deleteJob = async (jobId) => {
   try {
-    const { error } = await supabase
-      .from('work_tables')
-      .delete()
-      .eq('id', jobId)
+    const headers = await getAuthHeaders()
+    const response = await fetch(`${API_URL}/api/jobs/${jobId}`, {
+      method: 'DELETE',
+      headers
+    })
 
-    if (error) throw error
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Gagal menghapus data')
+
     return { error: null }
   } catch (err) {
     console.error('Error deleting job:', err)
